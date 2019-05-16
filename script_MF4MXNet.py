@@ -312,12 +312,13 @@ class CutHybridLayer(gluon.HybridBlock):
 
 
 
-def preDataset1(fs, T, C, shift_size, wind_size, margin,debug = True):
+def preDataset1(fs, T, C, shift_size, wind_size, margin,debug = True,TemplateOnly=False):
     temp_window = tukey(fs*wind_size, alpha=1./8)
+    mark = 1 if TemplateOnly else 2
     
     dataset_GW = {}
     keys = {}
-    for pre in ['train', 'test']:
+    for pre in ['train', 'test'][:mark]:
         if T == 1:
             data = np.load('data/GWaveform/data0.90.9_{}.npy'.format(pre))[:,1]
             dataset_GW[pre] = nd.array(data)[:,:C,::4]  # (1610,C,T*fs) cpu nd.ndarray
@@ -355,7 +356,7 @@ def preDataset1(fs, T, C, shift_size, wind_size, margin,debug = True):
 
     RP = RandomPeakAug(margin=margin, T=T, fs = fs, C = C, ori_peak=None, rand_jitter=1)
     
-    if debug:
+    if debug and (not TemplateOnly):
         noise, _ = Gen_noise(fs, T, C)   # (4096, C, fs*T)  cpu ndarray
         logger.debug('Noise from [Gen_noise()]: {}', noise.shape)
     
