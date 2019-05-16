@@ -115,8 +115,10 @@ if __name__ == "__main__":
 
     logger.debug('Total blocks: {}', len(GPSlist))
     
-    target = 100
-    GPSlist = GPSlist[target:target+100]
+    target = 10
+    GPSlist = GPSlist[target:target+90]
+    L1list = L1list[target:target+90]
+    H1list = H1list[target:target+90]
 
     # Let loop 1297
     for index, (H1url, L1url, GPS) in enumerate(zip(H1list, L1list, GPSlist)):
