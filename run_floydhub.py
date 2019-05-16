@@ -1,7 +1,7 @@
 #! usr/bin/python
 # coding=utf-8
 
-import os 
+import sys,os,datetime
 from tqdm import tqdm
 import readligo as rl
 import numpy as np
@@ -9,7 +9,18 @@ import pandas as pd
 import mxnet as mx
 from mxnet import nd, gluon
 from mxnet.gluon import data as gdata
-from script_MF4MXNet import EquapEvent, preDataset1, preNeuralNet
+from script_MF4MXNet import EquapEvent, preTemplateFloyd, preNeuralNet
+from loguru import logger
+config = {
+    "handlers": [
+        {"sink": "MF4MXNet_{}.log".format(datetime.date.today()), "level":"DEBUG" ,"format": '<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | <level>{message}</level>'},
+        {"sink": sys.stdout, "format": '<green>{time:YYYY-MM-DD}</green> <cyan>{time:HH:mm:ss}</cyan> | <level>{level: <7}</level> | <level>{message}</level>',
+        "level": "DEBUG"},
+    ],
+}
+#### REF #### https://loguru.readthedocs.io/en/stable/api/logger.html
+# DEBUG 10  # INFO 20  # WARNING 30  # ERROR 40  # CRITICAL 50
+logger.configure(**config)
 
 
 def LoadLIGO(data_address, GPS):
@@ -29,8 +40,8 @@ def LoadLIGO(data_address, GPS):
     assert np.allclose(time_L1, time_H1, atol=0, rtol=0) # Check GPS time for H1/L1
     GPStime = time_H1
 
-    print(strain_H1.shape, GPStime.shape, len(chan_dict_H1))
-    print(strain_L1.shape, GPStime.shape, len(chan_dict_L1))
+    logger.debug('Loaded strain_H1/GPStime/chan_dict_H1 shape: {}/{}/{}', strain_H1.shape, GPStime.shape, len(chan_dict_H1))
+    logger.debug('Loaded strain_L1/GPStime/chan_dict_L1 shape: {}/{}/{}', strain_L1.shape, GPStime.shape, len(chan_dict_L1))
     # Until here may costs 2.1 s
     return GPStime, strain_H1, chan_dict_H1, strain_L1, chan_dict_L1
 
@@ -48,20 +59,20 @@ def iteration_LIGOStrain(T, fs, LIGOdata, step, batch_size = 8):
     # Slice above may cost 1m11s
     # Check the validation of Slice
     assert [0 for i, j in Slice if False in bolnotnan[i:j] ] == []
-    print('Num of valid slice/steps:', len(Slice))
+    logger.debug('Num of valid slice/steps: {}', len(Slice))
     
     H1_block = nd.array(np.concatenate( [strain_H1[i:j].reshape(1,-1) for (i, j) in Slice] ))
     L1_block = nd.array(np.concatenate( [strain_L1[i:j].reshape(1,-1) for (i, j) in Slice] ))
-    print(H1_block.shape, L1_block.shape) # (Steps, T*fs)   
+    logger.debug('H1_block shape: {}; L1_block shape: {}', H1_block.shape, L1_block.shape) # (Steps, T*fs)   
 
     H1_psd_block = nd.concatenate([ EquapEvent(fs, i) for i in tqdm(H1_block.expand_dims(1), desc = 'Calc. PSD for H1_block') ])
     L1_psd_block = nd.concatenate([ EquapEvent(fs, i) for i in tqdm(L1_block.expand_dims(1), desc = 'Calc. PSD for L1_block') ])
-    print(H1_psd_block.shape, L1_psd_block.shape) # (Steps, 2, 1, T*fs)
+    logger.debug('H1_psd_block shape: {}; L1_psd_block shape: {}', H1_psd_block.shape, L1_psd_block.shape) # (Steps, 2, 1, T*fs)
     # psd_block here may cost 26s
 
     O1_psd_block = nd.concat(H1_psd_block.expand_dims(2), 
                              L1_psd_block.expand_dims(2), dim=2)
-    print(O1_psd_block.shape) # # (Steps, 2, 2, 1, T*fs)
+    logger.debug('O1_psd_block shape: {}', O1_psd_block.shape) # # (Steps, 2, 2, 1, T*fs)
 
     slice2df = lambda strain,i,j: pd.DataFrame(strain).iloc[int(i/fs):int(j/fs)]
     df2dict = lambda df: {col:df[col].values for col in df.columns} 
@@ -69,7 +80,7 @@ def iteration_LIGOStrain(T, fs, LIGOdata, step, batch_size = 8):
     chan_dict_H1 = [ df2dict(slice2df(chan_dict_H1, i, j)) for (i,j) in tqdm(Slice, desc='Slicing chan_dict_H1')]
     chan_dict_L1 = [ df2dict(slice2df(chan_dict_L1, i, j)) for (i,j) in tqdm(Slice, desc='Slicing chan_dict_L1')]
     chan_dict_block = np.concatenate(([chan_dict_H1], [chan_dict_L1]), axis=0).T
-    print(chan_dict_block.shape)
+    logger.debug('chan_dict_block shape: {}', chan_dict_block.shape)
     
     # O1_psd_block (steps, 2, 2, 1, T*fs) nd.array cpu
     # GPStime_block (steps, ) list
@@ -83,6 +94,7 @@ def iteration_LIGOStrain(T, fs, LIGOdata, step, batch_size = 8):
 
 
 if __name__ == "__main__":
+
 
     df_url = pd.read_table('segsurl_O1_4KHZ_0_689.txt', names='U').drop_duplicates()
     df_url['GPS'] = df_url.U.map(lambda x: int(x.split('/')[7:][0].split('-')[2]))
@@ -98,11 +110,17 @@ if __name__ == "__main__":
     # Check the corelationship of GPS => Get the GPSlist
     assert (dfH1.GPS - dfL1.GPS).unique() == 0
     GPSlist = dfH1.GPS.tolist()
-
+    logger.debug('Total blocks: {}', len(GPSlist))
+    
+    target = 100
+    GPSlist = GPSlist[target:target+100]
 
     # Let loop 1297
-    for GPS in GPSlist:
+    for index, GPS in enumerate(GPSlist):
+        print('{{"metric": "GPSlist", "value": {}}}'.format(index))
+        print('{{"metric": "GPS", "value": {}}}'.format(GPS))
 
+        logger.debug('#'*40)
         H1url = 'https://www.gw-openscience.org/archive/data/O1/1125122048/H-H1_LOSC_4_V1-{}-4096.hdf5'.format(GPS)
         L1url = 'https://www.gw-openscience.org/archive/data/O1/1125122048/L-L1_LOSC_4_V1-{}-4096.hdf5'.format(GPS)
         os.system('wget {} {}'.format(H1url, L1url))
@@ -114,7 +132,7 @@ if __name__ == "__main__":
         T = 5
         frac = 5
         step = T/frac  # second
-        batch_size = 8
+        batch_size = 14
         print(step)
 
         wind_size = 1
@@ -128,9 +146,9 @@ if __name__ == "__main__":
         ctx = [mx.gpu(0)]
 
 
-        dataset, iterator, chan_dict_block = iteration_LIGOStrain(T, fs, LIGOdata, step, batch_size = 8)
+        dataset, iterator, chan_dict_block = iteration_LIGOStrain(T, fs, LIGOdata, step, batch_size = batch_size)
 
-        predata = preDataset1(fs, T, C, shift_size, wind_size, margin, debug = True)
+        predata = preTemplateFloyd(fs, T, C, shift_size, wind_size, margin, debug = True)
         _, template_block, _, _,_,_,_,_,_  = predata
         net, _, _ = preNeuralNet(fs, T, ctx, template_block, margin)
 
@@ -149,7 +167,7 @@ if __name__ == "__main__":
             chan_list.extend(chan_dict_block[index*batch_size:batch_size + index*batch_size].tolist())
         # It may cost 7min or 10min
 
-        save_address = './GPS{}_SNR0.02-fs4096-T5w1-27-frac5.output'.format(GPS)
+        save_address = './GPS{}_index_SNR0.02-fs4096-T5w1-27-frac5.output'.format(GPS, index)
         np.save(save_address, [allpred_list, allmidGPStime_list, chan_list])
 
 

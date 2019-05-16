@@ -310,6 +310,39 @@ class CutHybridLayer(gluon.HybridBlock):
         # else:
         #     return F.slice_axis(F.Concat(x,x, dim=3), axis=-1, begin=self.left, end=self.right)
 
+def preTemplateFloyd(fs, T, C, shift_size, wind_size, margin,debug = True):
+    temp_window = tukey(fs*wind_size, alpha=1./8)
+    
+    dataset_GW = {}
+    keys = {}
+    pre = 'train'
+    data = np.load('/floyd/input/templates/data_T{}_fs4096_{}{}_{}.npy'.format(T,T*0.9,T*0.9, pre))[:,1] # drop GPS
+    dataset_GW[pre] = nd.array(data)[:,:C]  # (1610,C,T*fs) cpu nd.ndarray
+    keys[pre] = np.load('/floyd/input/templates/data_T{}_fs4096_{}{}_keys_{}.npy'.format(T, T*0.9,T*0.9,pre))    
+
+    logger.debug('Loading {} data: {}', pre, dataset_GW[pre].shape)
+    keys[pre] = pd.Series(keys[pre][:,0])  # pd.DataFrame
+
+    # use equal training masses as template
+    equalmass_index = keys['train'][keys['train'].map(lambda x: x.split('|')[0]==x.split('|')[1])].index.tolist()
+    nonequalmass_index = keys['train'][keys['train'].map(lambda x: x.split('|')[0]!=x.split('|')[1])].index.tolist()
+    template_block = dataset_GW['train'][equalmass_index]  # 35x1x4096 cpu nd.ndarray
+
+    # Move the template peak to center corresponding H1
+    d = int(template_block[:,0].argmax(-1)[0].asscalar() - fs*T//2)
+    template_block = nd.concat(template_block[:,:,d:], nd.zeros(template_block.shape[:2]+(d,)) , dim=2)[:,:,fs*T//2-wind_size*fs//2-int(shift_size*fs) : fs*T//2+wind_size*fs//2-int(shift_size*fs)] * nd.array(temp_window)
+    template_block = template_block.expand_dims(2)
+    if debug:
+        logger.debug('Template_block loaded: {}', template_block.shape)  # (35, C, 1, wind_size*fs) cpu nd.ndarray
+    if shift_size:
+        assert nd.sum(template_block[:,0,0].argmax(-1)).asscalar() / template_block.shape[0]  == int(wind_size*fs*0.8) # Check H1's peak position
+    else:
+        assert nd.sum(template_block[:,0,0].argmax(-1)).asscalar() / template_block.shape[0]  == wind_size*fs//2 # Check H1's peak position
+
+    RP = RandomPeakAug(margin=margin, T=T, fs = fs, C = C, ori_peak=None, rand_jitter=1)
+    
+    return dataset_GW, template_block, RP, keys, fs, T, C, margin, wind_size
+    
 
 
 def preDataset1(fs, T, C, shift_size, wind_size, margin,debug = True,TemplateOnly=False):

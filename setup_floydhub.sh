@@ -15,7 +15,3 @@ pip install pyinstrument
 pip install loguru
 pip install tqdm
 
-
-wget 
-source /root/.bashrc
-pip install gwosc
