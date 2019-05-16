@@ -110,19 +110,22 @@ if __name__ == "__main__":
     # Check the corelationship of GPS => Get the GPSlist
     assert (dfH1.GPS - dfL1.GPS).unique() == 0
     GPSlist = dfH1.GPS.tolist()
+    H1list = dfH1.U.tolist()
+    L1list = dfL1.U.tolist()
+
     logger.debug('Total blocks: {}', len(GPSlist))
     
     target = 100
     GPSlist = GPSlist[target:target+100]
 
     # Let loop 1297
-    for index, GPS in enumerate(GPSlist):
+    for index, (H1url, L1url, GPS) in enumerate(zip(H1list, L1list, GPSlist)):
         print('{{"metric": "GPSlist", "value": {}}}'.format(index))
         print('{{"metric": "GPS", "value": {}}}'.format(GPS))
 
         logger.debug('#'*40)
-        H1url = 'https://www.gw-openscience.org/archive/data/O1/1125122048/H-H1_LOSC_4_V1-{}-4096.hdf5'.format(GPS)
-        L1url = 'https://www.gw-openscience.org/archive/data/O1/1125122048/L-L1_LOSC_4_V1-{}-4096.hdf5'.format(GPS)
+        # H1url = 'https://www.gw-openscience.org/archive/data/O1/1125122048/H-H1_LOSC_4_V1-{}-4096.hdf5'.format(GPS)
+        # L1url = 'https://www.gw-openscience.org/archive/data/O1/1125122048/L-L1_LOSC_4_V1-{}-4096.hdf5'.format(GPS)
         os.system('wget {} {}'.format(H1url, L1url))
 
         data_address = os.path.join('./')
