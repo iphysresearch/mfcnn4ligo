@@ -156,7 +156,7 @@ class RandomPeakAug(Augmenter):
     def __call__(self, src):
         """Augmenter body"""
         assert src.shape[-2:] == (self.C, self.N)  # (nsample, C, N)
-        if self.ori_peak == None:
+        if self.ori_peak is None:
             self.ori_peak = int(src.argmax(axis=2)[0,0].asscalar()) # first+H1 as bench
             logger.debug('self.ori_peak: {}', self.ori_peak)
 
@@ -178,7 +178,7 @@ class RandomPeakAug(Augmenter):
             randlist= [ (i , i+fs) for i in np.random.randint(low=1,high=(fs-2*self.margin), size= full.shape[0]) if i+fs <= full.shape[-1]]
             assert len(randlist) == full.shape[0]
             return nd.concatenate([ sample.expand_dims(axis=0)[:,:,i:j] for sample, (i, j) in zip(full, randlist) ], axis=0) # (nsample, C, N)
-        
+
             # full = nd.concatenate([self.shape_aug(sample.swapaxes(0,1).expand_dims(axis=0)) for sample in full ], axis=0) # (nsample, N, C)
             # return full.swapaxes(1,2) # (nsample, C, N)
         else:
@@ -432,15 +432,13 @@ def getchiM(keys_template):
     m2_list = np.array(keys_template.map(lambda x: float(x.split('|')[1]) ))
 
     M_list = m1_list+m2_list
-    chiM = np.power( np.divide( np.power(m1_list * m2_list, 3) , M_list) , 1/5)
-    return chiM
+    return np.power( np.divide( np.power(m1_list * m2_list, 3) , M_list) , 1/5)
 
 def getMratio(keys_template):
     m1_list = np.array(keys_template.map(lambda x: float(x.split('|')[0]) ))
     m2_list = np.array(keys_template.map(lambda x: float(x.split('|')[1]) ))
 
-    q_list = m2_list/m1_list
-    return q_list
+    return m2_list/m1_list
 
 def preDataset2(SNR, data, batch_size, shuffle=True, fixed = None, debug = True):
 
